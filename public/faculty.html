@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Faculty Dashboard — AI Project Similarity Detection</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="dashboard">
+    <nav class="navbar">
+      <h1>🤖 AI Similarity Detection</h1>
+      <div class="navbar-right">
+        <span class="user-info">🎓 <strong id="user-name">Faculty</strong></span>
+        <button class="btn" onclick="logout()">Logout</button>
+      </div>
+    </nav>
+
+    <div class="container">
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-icon">👨‍🎓</div><div class="stat-value" id="stat-students">0</div><div class="stat-label">Students</div></div>
+        <div class="stat-card"><div class="stat-icon">📋</div><div class="stat-value" id="stat-projects">0</div><div class="stat-label">Submitted</div></div>
+        <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-value" id="stat-approved">0</div><div class="stat-label">Approved</div></div>
+        <div class="stat-card"><div class="stat-icon">⚠️</div><div class="stat-value" id="stat-warned">0</div><div class="stat-label">Warned</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>📑 All Project Titles (AI Monitored)</h2>
+          <input type="text" class="search-input" id="search-input" placeholder="🔍 Search..." oninput="filterProjects()">
+        </div>
+        <div id="projects-content">
+          <div class="loading"><div class="spinner"></div><p style="margin-top:12px">Loading...</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Warn Modal -->
+  <div class="modal-overlay" id="warn-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>⚠️ Warn Student</h3>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom:6px;color:var(--text-light);font-size:.85rem">Student: <strong id="warn-student-name"></strong></p>
+        <p style="margin-bottom:6px;color:var(--text-light);font-size:.85rem">Roll No: <strong id="warn-student-rollno"></strong></p>
+        <p style="margin-bottom:14px;color:var(--text-light);font-size:.85rem">Title: <strong id="warn-project-title"></strong></p>
+        <div class="form-group">
+          <label for="warn-message">Warning Message</label>
+          <textarea id="warn-message" placeholder="Explain why the student should change their title..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-sm" style="background:var(--text-light);color:#fff" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-warning btn-sm" id="send-warn-btn" onclick="sendWarning()">Send Warning</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <script>
+    let currentUser=null, allProjects=[], warnProjectId=null;
+
+    async function init(){
+      try{
+        const d=await(await fetch('/api/auth/me')).json();
+        if(!d.user||d.user.role!=='faculty'){window.location.href='/';return;}
+        currentUser=d.user;
+        document.getElementById('user-name').textContent=currentUser.name;
+        await loadStats(); await loadProjects();
+        setInterval(()=>{loadStats();loadProjects();},10000);
+      }catch{window.location.href='/';}
+    }
+
+    async function loadStats(){
+      const d=await(await fetch('/api/faculty/stats')).json();
+      const s=d.stats;
+      document.getElementById('stat-students').textContent=s.totalStudents;
+      document.getElementById('stat-projects').textContent=s.totalProjects;
+      document.getElementById('stat-approved').textContent=s.approvedProjects;
+      document.getElementById('stat-warned').textContent=s.warnedProjects;
+    }
+
+    async function loadProjects(){
+      try{
+        const d=await(await fetch('/api/faculty/projects')).json();
+        allProjects=d.projects; renderProjects(allProjects);
+      }catch{
+        document.getElementById('projects-content').innerHTML='<div class="empty-state"><p>Error loading projects.</p></div>';
+      }
+    }
+
+    function renderProjects(projects){
+      const el=document.getElementById('projects-content');
+      if(!projects.length){
+        el.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><p>No projects submitted yet.</p></div>';
+        return;
+      }
+      el.innerHTML=`
+        <div class="table-responsive"><table>
+          <thead><tr><th>#</th><th>Student</th><th>Roll No</th><th>Project Title</th><th>Status</th><th>AI Score</th><th>Warns</th><th>Actions</th></tr></thead>
+          <tbody>${projects.map((p,i)=>`<tr>
+            <td>${i+1}</td>
+            <td><span class="title-text">${esc(p.student_name)}</span></td>
+            <td><span class="student-name">${esc(p.student_username)}</span></td>
+            <td>
+              <div class="title-text">${esc(p.title)}</div>
+              ${p.max_similarity>=40?`<div style="margin-top:3px;font-size:.72rem;color:var(--text-light)">Similar to: <em>${esc(p.most_similar_to)}</em></div>`:''}
+            </td>
+            <td><span class="badge badge-${p.status}">${p.status}</span></td>
+            <td>${p.max_similarity>0
+              ?`<span class="badge ${p.max_similarity>=55?'badge-similarity':p.max_similarity>=40?'badge-warned':'badge-submitted'}">${p.max_similarity}%</span>`
+              :'<span style="color:var(--text-light)">—</span>'}</td>
+            <td><span style="color:${p.warning_count>0?'var(--warning)':'var(--text-light)'};font-weight:${p.warning_count>0?'700':'400'}">${p.warning_count}</span></td>
+            <td><div class="actions-cell">
+              <button class="btn btn-warning btn-sm" onclick="openModal(${p.id},'${escA(p.student_name)}','${escA(p.student_username)}','${escA(p.title)}')">Warn</button>
+              ${p.status!=='approved'?`<button class="btn btn-success btn-sm" onclick="approve(${p.id})">Approve</button>`:''}
+            </div></td>
+          </tr>`).join('')}</tbody>
+        </table></div>`;
+    }
+
+    function filterProjects(){
+      const q=document.getElementById('search-input').value.toLowerCase();
+      renderProjects(allProjects.filter(p=>p.title.toLowerCase().includes(q)||p.student_name.toLowerCase().includes(q)||p.student_username.toLowerCase().includes(q)));
+    }
+
+    function openModal(id,name,rollno,title){
+      warnProjectId=id;
+      document.getElementById('warn-student-name').textContent=name;
+      document.getElementById('warn-student-rollno').textContent=rollno;
+      document.getElementById('warn-project-title').textContent=title;
+      document.getElementById('warn-message').value='';
+      document.getElementById('warn-modal').classList.add('active');
+    }
+    function closeModal(){document.getElementById('warn-modal').classList.remove('active');warnProjectId=null;}
+
+    async function sendWarning(){
+      const msg=document.getElementById('warn-message').value.trim();
+      if(msg.length<5){showToast('Message too short','error');return;}
+      const btn=document.getElementById('send-warn-btn');
+      btn.disabled=true;btn.textContent='Sending...';
+      try{
+        const res=await fetch(`/api/faculty/warn/${warnProjectId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});
+        if(res.ok){showToast('Warning sent!','success');closeModal();await loadStats();await loadProjects();}
+        else{const d=await res.json();showToast(d.error,'error');}
+      }catch{showToast('Connection error','error');}
+      btn.disabled=false;btn.textContent='Send Warning';
+    }
+
+    async function approve(id){
+      try{
+        const res=await fetch(`/api/faculty/approve/${id}`,{method:'POST'});
+        if(res.ok){showToast('Approved!','success');await loadStats();await loadProjects();}
+        else{const d=await res.json();showToast(d.error,'error');}
+      }catch{showToast('Connection error','error');}
+    }
+
+    async function logout(){await fetch('/api/auth/logout',{method:'POST'});window.location.href='/';}
+
+    function esc(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+    function escA(t){return t.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');}
+
+    function showToast(msg,type='info'){
+      const c=document.getElementById('toast-container'),t=document.createElement('div');
+      t.className=`toast toast-${type}`;t.textContent=msg;c.appendChild(t);
+      setTimeout(()=>{t.style.animation='slideOut .3s ease forwards';setTimeout(()=>t.remove(),300);},4000);
+    }
+
+    init();
+  </script>
+</body>
+</html>

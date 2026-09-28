@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Based Project Similarity Detection System</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="logo-icon">🤖</div>
+        <h1>AI Based Project Similarity Detection System</h1>
+        <p>Powered by TF-IDF, Cosine Similarity &amp; NLP</p>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('login')">Login</button>
+        <button class="tab-btn" onclick="switchTab('register')">Register</button>
+      </div>
+
+      <!-- Login -->
+      <div id="login-tab" class="tab-content active">
+        <form id="login-form" onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label for="login-rollno">Roll No / Faculty ID</label>
+            <input type="text" id="login-rollno" placeholder="e.g. 21CS045 or faculty" required>
+          </div>
+          <div class="form-group">
+            <label for="login-password">Password</label>
+            <input type="password" id="login-password" placeholder="Enter your password" required>
+          </div>
+          <button type="submit" class="btn btn-primary" id="login-btn">Login</button>
+        </form>
+        <div style="margin-top:20px;text-align:center;font-size:.78rem;color:var(--text-light)">
+          <p><strong>Faculty Login:</strong> ID: <code>faculty</code> &nbsp;|&nbsp; Password: <code>faculty123</code></p>
+        </div>
+      </div>
+
+      <!-- Register -->
+      <div id="register-tab" class="tab-content">
+        <form id="register-form" onsubmit="handleRegister(event)">
+          <div class="form-group">
+            <label for="reg-name">Full Name</label>
+            <input type="text" id="reg-name" placeholder="e.g. Rahul Sharma" required>
+          </div>
+          <div class="form-group">
+            <label for="reg-rollno">Roll No</label>
+            <input type="text" id="reg-rollno" placeholder="e.g. 21CS045" required>
+          </div>
+          <div class="form-group">
+            <label for="reg-password">Password</label>
+            <input type="password" id="reg-password" placeholder="Choose a password" required>
+          </div>
+          <button type="submit" class="btn btn-primary" id="register-btn">Register as Student</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <script>
+    fetch('/api/auth/me').then(r=>r.json()).then(d=>{
+      if(d.user) window.location.href = d.user.role==='faculty'?'/faculty':'/student';
+    }).catch(()=>{});
+
+    function switchTab(tab){
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+      if(tab==='login'){
+        document.querySelectorAll('.tab-btn')[0].classList.add('active');
+        document.getElementById('login-tab').classList.add('active');
+      } else {
+        document.querySelectorAll('.tab-btn')[1].classList.add('active');
+        document.getElementById('register-tab').classList.add('active');
+      }
+    }
+
+    async function handleLogin(e){
+      e.preventDefault();
+      const btn=document.getElementById('login-btn');
+      btn.disabled=true; btn.textContent='Logging in...';
+      try{
+        const res=await fetch('/api/auth/login',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            username:document.getElementById('login-rollno').value,
+            password:document.getElementById('login-password').value
+          })
+        });
+        const data=await res.json();
+        if(res.ok){
+          showToast('Login successful!','success');
+          setTimeout(()=>{window.location.href=data.user.role==='faculty'?'/faculty':'/student';},400);
+        } else { showToast(data.error,'error'); btn.disabled=false; btn.textContent='Login'; }
+      } catch{ showToast('Connection error','error'); btn.disabled=false; btn.textContent='Login'; }
+    }
+
+    async function handleRegister(e){
+      e.preventDefault();
+      const btn=document.getElementById('register-btn');
+      btn.disabled=true; btn.textContent='Registering...';
+      try{
+        const res=await fetch('/api/auth/register',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            name:document.getElementById('reg-name').value,
+            username:document.getElementById('reg-rollno').value,
+            password:document.getElementById('reg-password').value
+          })
+        });
+        const data=await res.json();
+        if(res.ok){
+          showToast('Registered!','success');
+          setTimeout(()=>{window.location.href='/student';},400);
+        } else { showToast(data.error,'error'); btn.disabled=false; btn.textContent='Register as Student'; }
+      } catch{ showToast('Connection error','error'); btn.disabled=false; btn.textContent='Register as Student'; }
+    }
+
+    function showToast(msg,type='info'){
+      const c=document.getElementById('toast-container'),t=document.createElement('div');
+      t.className=`toast toast-${type}`;
+      t.innerHTML=`${msg}`;
+      c.appendChild(t);
+      setTimeout(()=>{t.style.animation='slideOut .3s ease forwards';setTimeout(()=>t.remove(),300);},3000);
+    }
+  </script>
+</body>
+</html>

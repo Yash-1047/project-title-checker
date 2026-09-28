@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Dashboard — AI Project Similarity Detection</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="dashboard">
+    <nav class="navbar">
+      <h1>🤖 AI Similarity Detection</h1>
+      <div class="navbar-right">
+        <span class="user-info">👋 <strong id="user-name">Student</strong></span>
+        <button class="btn" onclick="logout()">Logout</button>
+      </div>
+    </nav>
+
+    <div class="container">
+
+      <!-- Submit Title -->
+      <div class="card" id="submit-card">
+        <div class="card-header"><h2>📝 Submit Project Title</h2></div>
+        <form id="title-form" onsubmit="submitTitle(event)">
+          <div class="form-group">
+            <label for="project-title">Enter your project title</label>
+            <input type="text" id="project-title" placeholder="e.g., AI-Based Attendance System Using Face Recognition" required minlength="5">
+          </div>
+          <button type="submit" class="btn btn-primary" id="submit-btn">Submit Title</button>
+        </form>
+        <div id="similarity-alert"></div>
+      </div>
+
+      <!-- Project Status -->
+      <div class="card" id="project-card" style="display:none">
+        <div class="card-header">
+          <h2>📊 Your Project Status</h2>
+          <button class="btn btn-outline btn-sm" onclick="showEditMode()">✏️ Change Title</button>
+        </div>
+        <div id="project-status-content"></div>
+      </div>
+
+      <!-- Edit Title -->
+      <div class="card" id="edit-card" style="display:none">
+        <div class="card-header">
+          <h2>✏️ Change Project Title</h2>
+          <button class="btn btn-sm" style="background:var(--text-light);color:#fff" onclick="hideEditMode()">Cancel</button>
+        </div>
+        <form id="edit-form" onsubmit="updateTitle(event)">
+          <div class="form-group">
+            <label for="edit-title">New project title</label>
+            <input type="text" id="edit-title" placeholder="Enter your new title" required minlength="5">
+          </div>
+          <button type="submit" class="btn btn-primary" id="edit-btn">Update Title</button>
+        </form>
+        <div id="edit-similarity-alert"></div>
+      </div>
+
+      <!-- Warnings -->
+      <div class="card" id="warnings-card" style="display:none">
+        <div class="card-header">
+          <h2>⚠️ Faculty Warnings <span id="warning-badge" class="notification-badge" style="display:none">0</span></h2>
+        </div>
+        <div id="warnings-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <script>
+    let currentUser=null, currentProject=null;
+
+    async function init(){
+      try{
+        const d=await(await fetch('/api/auth/me')).json();
+        if(!d.user||d.user.role!=='student'){window.location.href='/';return;}
+        currentUser=d.user;
+        document.getElementById('user-name').textContent=currentUser.name;
+        await loadProject(); await loadWarnings();
+        setInterval(pollWarnings,15000);
+      }catch{window.location.href='/';}
+    }
+
+    async function loadProject(){
+      const d=await(await fetch('/api/student/project')).json();
+      if(d.project){currentProject=d.project;showProjectStatus(d.project);}
+      else{document.getElementById('submit-card').style.display='block';document.getElementById('project-card').style.display='none';}
+    }
+
+    function showProjectStatus(p){
+      document.getElementById('submit-card').style.display='none';
+      document.getElementById('project-card').style.display='block';
+      const icons={submitted:'📤',approved:'✅',warned:'⚠️'};
+      document.getElementById('project-status-content').innerHTML=`
+        <div class="project-status">
+          <div class="status-icon">${icons[p.status]||'📋'}</div>
+          <h3>Your Project Title</h3>
+          <div class="project-title-display">${esc(p.title)}</div>
+          <div style="margin-top:16px"><span class="badge badge-${p.status}">${p.status.toUpperCase()}</span></div>
+          <p style="margin-top:12px;color:var(--text-light);font-size:.82rem">
+            Submitted on ${new Date(p.created_at).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'})}
+          </p>
+        </div>`;
+    }
+
+    async function submitTitle(e){
+      e.preventDefault();
+      const btn=document.getElementById('submit-btn'), title=document.getElementById('project-title').value.trim();
+      btn.disabled=true; btn.textContent='Checking...';
+      document.getElementById('similarity-alert').innerHTML='';
+      try{
+        const res=await fetch('/api/student/project',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title})});
+        const data=await res.json();
+        if(res.ok){showToast(data.message,'success');await loadProject();}
+        else{
+          showToast(data.error,'error');
+          if(data.similarTitles) renderSimilar('similarity-alert',data.similarTitles);
+        }
+      }catch{showToast('Connection error','error');}
+      btn.disabled=false; btn.textContent='Submit Title';
+    }
+
+    function showEditMode(){
+      document.getElementById('edit-card').style.display='block';
+      document.getElementById('edit-title').value=currentProject?currentProject.title:'';
+      document.getElementById('edit-similarity-alert').innerHTML='';
+    }
+    function hideEditMode(){document.getElementById('edit-card').style.display='none';}
+
+    async function updateTitle(e){
+      e.preventDefault();
+      const btn=document.getElementById('edit-btn'), title=document.getElementById('edit-title').value.trim();
+      btn.disabled=true; btn.textContent='Checking...';
+      document.getElementById('edit-similarity-alert').innerHTML='';
+      try{
+        const res=await fetch('/api/student/project',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({title})});
+        const data=await res.json();
+        if(res.ok){showToast(data.message,'success');hideEditMode();await loadProject();await loadWarnings();}
+        else{
+          showToast(data.error,'error');
+          if(data.similarTitles) renderSimilar('edit-similarity-alert',data.similarTitles);
+        }
+      }catch{showToast('Connection error','error');}
+      btn.disabled=false; btn.textContent='Update Title';
+    }
+
+    function renderSimilar(id,titles){
+      document.getElementById(id).innerHTML=`
+        <div class="similar-alert">
+          <h4>🚫 Similar Titles Found:</h4>
+          <ul>${titles.map(t=>`
+            <li>
+              <span>${esc(t.title)}</span>
+              <span class="similarity-score">${t.similarity}% match</span>
+            </li>`).join('')}
+          </ul>
+        </div>`;
+    }
+
+    async function loadWarnings(){
+      const d=await(await fetch('/api/student/warnings')).json();
+      const card=document.getElementById('warnings-card');
+      if(d.warnings&&d.warnings.length>0){
+        card.style.display='block';
+        document.getElementById('warnings-content').innerHTML=`
+          <div class="warning-list">${d.warnings.map(w=>`
+            <div class="warning-item">
+              <div class="warning-from">⚠️ From: ${esc(w.faculty_name)}</div>
+              <div class="warning-message">${esc(w.message)}</div>
+              <div class="warning-date">${new Date(w.created_at).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+            </div>`).join('')}
+          </div>`;
+      }else{card.style.display='none';}
+    }
+
+    async function pollWarnings(){
+      try{
+        const d=await(await fetch('/api/student/warnings/count')).json();
+        if(d.count>0){
+          document.getElementById('warning-badge').style.display='inline-flex';
+          document.getElementById('warning-badge').textContent=d.count;
+          showToast('New warning from faculty!','warning');
+          await loadProject(); await loadWarnings();
+        }
+      }catch{}
+    }
+
+    async function logout(){await fetch('/api/auth/logout',{method:'POST'});window.location.href='/';}
+    function esc(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+
+    function showToast(msg,type='info'){
+      const c=document.getElementById('toast-container'),t=document.createElement('div');
+      t.className=`toast toast-${type}`;t.textContent=msg;c.appendChild(t);
+      setTimeout(()=>{t.style.animation='slideOut .3s ease forwards';setTimeout(()=>t.remove(),300);},4000);
+    }
+
+    init();
+  </script>
+</body>
+</html>
