@@ -3,3 +3,5 @@ werkzeug
 scikit-learn
 nltk
 numpy
+beautifulsoup4
+requests

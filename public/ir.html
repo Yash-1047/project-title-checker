@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Information Retrieval Dashboard — Project Title Checker</title>
+<link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/ir.css">
+</head>
+<body class="ir">
+<nav class="navbar"><h1>Information Retrieval Dashboard</h1>
+  <div class="navbar-right"><span class="user-info" id="who"></span><a class="btn" id="back" href="/">Back to Dashboard</a><button class="btn" onclick="logout()">Logout</button></div></nav>
+<div class="ir-layout">
+<aside class="ir-side" id="side"></aside>
+<main class="ir-main">
+
+<section class="panel" id="p-search">
+ <div class="card"><h2>Ranked Search</h2>
+  <div class="row"><div class="grow"><label for="s-q">Query</label><input id="s-q" placeholder="e.g. face recognition attendance" maxlength="500"></div>
+   <div><label for="s-m">Ranking method</label><select id="s-m"><option value="tfidf">TF-IDF + cosine</option><option value="lm">Language model (Laplace)</option><option value="dfr">DFR (I(n<sub>e</sub>)B2)</option><option value="all">Compare all</option></select></div>
+   <button class="btn btn-primary" id="s-go">Search</button></div><div class="out" id="s-out"></div></div>
+ <div class="card"><h2>Finite-State Term Matcher</h2>
+  <div class="row"><div class="grow"><label for="a-t">Terms (space/comma separated)</label><input id="a-t" placeholder="face attendance"></div></div>
+  <div class="row"><div class="grow"><label for="a-x">Text</label><textarea id="a-x" rows="2" placeholder="Smart attendance using face recognition"></textarea></div><button class="btn btn-primary" id="a-go">Run automaton</button></div><div class="out" id="a-out"></div></div>
+
+
+</section>
+
+
+
+<section class="panel" id="p-passage">
+ <div class="card"><h2>Passage Retrieval</h2>
+  <div class="row"><div class="grow"><label for="ps-q">Query</label><input id="ps-q" maxlength="500"></div><div><label for="ps-m">Method</label><select id="ps-m"><option value="tfidf">TF-IDF + cosine</option><option value="lm">Language model</option><option value="dfr">DFR</option></select></div></div>
+  <div class="row"><div class="grow"><label for="ps-t">Text</label><textarea id="ps-t" rows="7"></textarea></div></div>
+  <button class="btn btn-primary" id="ps-go">Rank passages</button><div class="out" id="ps-out"></div></div>
+</section>
+
+<section class="panel" id="p-rec">
+ <div class="card"><h2>Content-Based Recommendation</h2>
+  <div class="row"><div class="grow"><label for="r-q">Project idea or title</label><input id="r-q" maxlength="500"></div><button class="btn btn-primary" id="r-go">Recommend</button></div><div class="out" id="r-out"></div></div>
+ <div class="card"><h2>Knowledge-Based Recommendation</h2>
+  <div class="row"><div><label for="k-s">Status</label><select id="k-s"><option value="">Any</option><option>submitted</option><option>approved</option><option>warned</option></select></div>
+   <div class="grow"><label for="k-i">Must contain terms</label><input id="k-i" placeholder="e.g. blockchain"></div>
+   <div class="grow"><label for="k-e">Must avoid terms</label><input id="k-e"></div>
+   <div><label for="k-w">Min. words</label><input id="k-w" type="number" min="0" max="50" value="0"></div>
+   <button class="btn btn-primary" id="k-go">Find</button></div><div class="out" id="k-out"></div></div>
+ <div class="card" id="cf-card"><h2>Collaborative Filtering</h2>
+  <div class="out" id="cf-rate"></div><button class="btn btn-primary" id="cf-go">Get my recommendations</button><div class="out" id="cf-out"></div></div>
+</section>
+
+<section class="panel" id="p-pr">
+ <div class="card"><h2>PageRank</h2>x
+  <div class="row"><div><label for="pr-t">Similarity threshold (0–1)</label><input id="pr-t" type="number" step="0.05" min="0" max="1" value="0.15"></div><button class="btn btn-primary" id="pr-go">Compute</button></div><div class="out" id="pr-out"></div></div>
+</section>
+
+<section class="panel" id="p-eval">
+ <div class="card"><h2>Evaluation (Precision@K, Recall@K, MAP)</h2>
+  <div class="row"><div><label for="e-k">K</label><input id="e-k" type="number" min="1" max="50" value="3"></div><button class="btn btn-primary" id="e-go">Evaluate all methods</button></div><div class="out" id="e-out"></div></div>
+ <div class="card"><h2>Relevance Labels</h2><p class="muted" id="j-hint">Faculty: enter a query and tick the projects that are relevant to it.</p>
+  <div id="j-form"><div class="row"><div class="grow"><label for="j-q">Query</label><input id="j-q" maxlength="500"></div><button class="btn btn-primary" id="j-save">Save labels</button></div><div id="j-list" class="out"></div></div>
+  <div class="out" id="j-out"></div></div>
+</section>
+
+<section class="panel" id="p-web">
+ <div class="card"><h2>Web Crawler</h2>
+  <div class="row"><div class="grow"><label for="c-u">Public URL</label><input id="c-u" placeholder="https://example.com/"></div><button class="btn btn-primary" id="c-go">Crawl</button></div><div class="out" id="c-out"></div></div>
+</section>
+
+<section class="panel" id="p-ie">
+ <div class="card"><h2>Information Extraction</h2>
+  <div class="row"><div class="grow"><label for="x-t">Text</label><textarea id="x-t" rows="3"></textarea></div></div>
+  <div class="row"><div class="grow"><label for="x-h">HTML (optional, JSON-LD is read from here)</label><textarea id="x-h" rows="3"></textarea></div></div>
+  <button class="btn btn-primary" id="x-go">Extract</button> <button class="btn" id="x-db">Extract from stored titles</button><div class="out" id="x-out"></div></div>
+ <div class="card"><h2>Semantic Search (LSA demo)</h2>
+  <div class="row"><div class="grow"><label for="m-q">Query</label><input id="m-q" maxlength="500"></div><button class="btn btn-primary" id="m-go">Search</button></div><div class="out" id="m-out"></div></div>
+</section>
+
+<section class="panel" id="p-par">
+ <div class="card"><h2>MapReduce-Style Term Frequency</h2>
+  <div class="row"><div class="grow"><label for="mr-d">Documents (one per line; leave empty to use stored titles)</label><textarea id="mr-d" rows="4"></textarea></div></div>
+  <button class="btn btn-primary" id="mr-go">Run</button><div class="out" id="mr-out"></div></div>
+</section>
+
+
+
+
+</main></div>
+<script src="/js/ir.js"></script>
+</body></html>
