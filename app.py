@@ -16,13 +16,15 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 # Import our AI/ML engine
 from ml_engine import engine as similarity_engine
+from ir_routes import create_ir_blueprint, ensure_ir_tables
+from ir.recommend import content_based
 
 # ============================================================
 # App Configuration
 # ============================================================
 
 app = Flask(__name__, static_folder='public', static_url_path='')
-app.secret_key = 'ai-project-similarity-detection-secret-2024'
+app.secret_key = os.environ.get('SECRET_KEY', 'ai-project-similarity-detection-secret-2024')
 app.permanent_session_lifetime = timedelta(hours=24)
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data.db')
@@ -75,6 +77,8 @@ def init_db():
         );
     ''')
 
+    ensure_ir_tables(conn)
+
     # Seed default faculty account
     existing = conn.execute(
         'SELECT id FROM users WHERE username = ?', ('faculty',)
@@ -88,12 +92,48 @@ def init_db():
         conn.commit()
         print('[OK] Default faculty account created: username=faculty, password=faculty123')
 
+    # Add a few example projects on the first run so the IR search can be tested.
+    # These are clearly labelled demo records and can be replaced with real projects.
+    project_count = conn.execute('SELECT COUNT(*) FROM projects').fetchone()[0]
+    if project_count == 0:
+        demo_projects = [
+            ('demo_student_1', 'Asha Demo', 'Student Performance Prediction System'),
+            ('demo_student_2', 'Rohan Demo', 'Student Result Analysis Using Machine Learning'),
+            ('demo_student_3', 'Neha Demo', 'Online Shopping Management System'),
+            ('demo_student_4', 'Arjun Demo', 'Movie Recommendation System'),
+            ('demo_student_5', 'Sara Demo', 'Face Recognition Attendance System'),
+            ('demo_student_6', 'Kabir Demo', 'Product Demand Prediction Using Python'),
+            ('demo_student_7', 'Mira Demo', 'Travel Group Recommendation System'),
+            ('demo_student_8', 'Ishaan Demo', 'Library Management System'),
+        ]
+        for username, name, title in demo_projects:
+            conn.execute(
+                'INSERT OR IGNORE INTO users (username, password, name, role) VALUES (?, ?, ?, ?)',
+                (username, generate_password_hash('demo123'), name, 'student')
+            )
+            student = conn.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone()
+            conn.execute(
+                'INSERT OR IGNORE INTO projects (student_id, title, status) VALUES (?, ?, ?)',
+                (student['id'], title, 'approved')
+            )
+        conn.commit()
+        print('[OK] Example project records added for testing the IR dashboard.')
+
     conn.close()
 
 
 # ============================================================
 # Auth Decorators
 # ============================================================
+
+def require_login(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'error': 'Please log in to continue'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
 
 def require_student(f):
     @wraps(f)
@@ -284,6 +324,7 @@ def submit_project():
         'message': 'Project title accepted by AI! Submitted successfully.',
         'project': {'id': pid, 'title': title, 'status': 'submitted'},
         'analysis': analysis,
+        'recommendations': _recommendations_for(title, session['user_id']),
     }), 201
 
 
@@ -333,6 +374,7 @@ def update_project():
         'message': 'Title updated and accepted by AI!',
         'project': {'id': existing_proj['id'], 'title': title, 'status': 'submitted'},
         'analysis': analysis,
+        'recommendations': _recommendations_for(title, session['user_id']),
     })
 
 
@@ -474,6 +516,22 @@ def faculty_stats():
 
 
 # ============================================================
+# Information Retrieval (IR) APIs  ->  see ir_routes.py / ir/
+# ============================================================
+
+app.register_blueprint(create_ir_blueprint(get_db, require_login, require_student, require_faculty))
+
+
+def _recommendations_for(title, student_id):
+    """Top-3 similar existing projects (current student's own project excluded)."""
+    conn = get_db()
+    rows = conn.execute('SELECT id, title, student_id FROM projects WHERE student_id != ?',
+                        (student_id,)).fetchall()
+    conn.close()
+    return content_based(title, [dict(r) for r in rows], 3)
+
+
+# ============================================================
 # Page Routes
 # ============================================================
 
@@ -488,6 +546,10 @@ def student_page():
 @app.route('/faculty')
 def faculty_page():
     return send_from_directory('public', 'faculty.html')
+
+@app.route('/ir')
+def ir_page():
+    return send_from_directory('public', 'ir.html')
 
 @app.route('/<path:path>')
 def static_files(path):
@@ -511,4 +573,5 @@ if __name__ == '__main__':
     print('  Faculty Login:  username=faculty  password=faculty123')
     print()
 
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host=os.environ.get('HOST', '127.0.0.1'), port=port,
+            debug=os.environ.get('FLASK_DEBUG') == '1')

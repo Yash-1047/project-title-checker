@@ -12,7 +12,7 @@
       <h1>🤖 AI Similarity Detection</h1>
       <div class="navbar-right">
         <span class="user-info">👋 <strong id="user-name">Student</strong></span>
-        <button class="btn" onclick="logout()">Logout</button>
+        <a class="btn" href="/ir">IR Dashboard</a><button class="btn" onclick="logout()">Logout</button>
       </div>
     </nav>
 
@@ -38,6 +38,12 @@
           <button class="btn btn-outline btn-sm" onclick="showEditMode()">✏️ Change Title</button>
         </div>
         <div id="project-status-content"></div>
+      </div>
+
+      <!-- Similar projects (content-based recommendation) -->
+      <div class="card" id="rec-card" style="display:none">
+        <div class="card-header"><h2>🔎 Similar Existing Projects</h2></div>
+        <div id="rec-content"></div>
       </div>
 
       <!-- Edit Title -->
@@ -85,7 +91,7 @@
 
     async function loadProject(){
       const d=await(await fetch('/api/student/project')).json();
-      if(d.project){currentProject=d.project;showProjectStatus(d.project);}
+      if(d.project){currentProject=d.project;showProjectStatus(d.project);loadRecs();}
       else{document.getElementById('submit-card').style.display='block';document.getElementById('project-card').style.display='none';}
     }
 
@@ -103,6 +109,18 @@
             Submitted on ${new Date(p.created_at).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'})}
           </p>
         </div>`;
+    }
+
+    async function loadRecs(){
+      try{
+        const d=await(await fetch('/api/ir/my-recommendations')).json();
+        const card=document.getElementById('rec-card');
+        card.style.display='block';
+        const r=d.recommendations||[];
+        document.getElementById('rec-content').innerHTML=r.length?
+          `<table><thead><tr><th>#</th><th>Title</th><th>Similarity</th></tr></thead><tbody>${r.map(x=>`<tr><td>${x.position}</td><td>${esc(x.title)}</td><td>${x.similarity_percent}%</td></tr>`).join('')}</tbody></table>`:
+          '<p style="color:var(--text-light)">No similar projects found.</p>';
+      }catch{}
     }
 
     async function submitTitle(e){
